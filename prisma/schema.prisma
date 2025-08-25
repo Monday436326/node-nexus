@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = "prisma+postgres://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqd3RfaWQiOjEsInNlY3VyZV9rZXkiOiJza19kUWJ3cWRUM2pudUtlNnBGSkN1VEEiLCJhcGlfa2V5IjoiMDFLMlFBSFMxUjFLMDhRUDJBQlBBSENIQjAiLCJ0ZW5hbnRfaWQiOiJkMTJiNmQwOTFlYjY1MGUwMzEyMzg1NDQ2Y2U2OGNiMWNlM2JhZmFjMzgxYTExMDFiZjlhMmQyMTBjZDVjNmMwIiwiaW50ZXJuYWxfc2VjcmV0IjoiMDM1NmE3OGUtMDE3Mi00OTg4LWJlZjQtYmVmZGVlNDBlODEyIn0.K8EEJWgebfqLhqd576OIIf1pINYxIg9imEVFLziyB-0"
+}
+
+model SupplyOffer {
+  id          String   @id @default(cuid())
+  walletAddress String @db.VarChar(42)
+  cpuCores    Int      @db.SmallInt
+  gpuCount    Int      @db.SmallInt
+  gpuType     String?  @db.VarChar(100)
+  ramGB       Int      @db.SmallInt
+  storageGB   Int      @db.Integer
+  pricePerHour Decimal @db.Decimal(10, 6)
+  available   Boolean  @default(true)
+  location    String?  @db.VarChar(100)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  
+  // Relations
+  matches     Match[]
+  
+  // Indexes
+  @@index([available])
+  @@index([walletAddress])
+  @@index([pricePerHour])
+  @@index([createdAt])
+  @@map("supply_offers")
+}
+
+model DemandRequest {
+  id          String   @id @default(cuid())
+  walletAddress String @db.VarChar(42)
+  cpuCores    Int      @db.SmallInt
+  gpuCount    Int      @db.SmallInt
+  gpuType     String?  @db.VarChar(100)
+  ramGB       Int      @db.SmallInt
+  storageGB   Int      @db.Integer
+  maxPricePerHour Decimal @db.Decimal(10, 6)
+  duration    Int      @db.SmallInt // hours
+  jobDescription String? @db.Text
+  status      String   @default("active") @db.VarChar(20) // active, matched, completed, cancelled
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  
+  // Relations
+  matches     Match[]
+  
+  // Indexes
+  @@index([status])
+  @@index([walletAddress])
+  @@index([maxPricePerHour])
+  @@index([createdAt])
+  @@map("demand_requests")
+}
+
+model Match {
+  id              String   @id @default(cuid())
+  supplyOfferId   String
+  demandRequestId String
+  agreedPrice     Decimal  @db.Decimal(10, 6)
+  status          String   @default("pending") @db.VarChar(20) // pending, active, completed, cancelled
+  txHash          String?  @db.VarChar(66)
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+  
+  // Relations
+  supplyOffer     SupplyOffer   @relation(fields: [supplyOfferId], references: [id], onDelete: Cascade)
+  demandRequest   DemandRequest @relation(fields: [demandRequestId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+  
+  // Indexes
+  @@index([status])
+  @@index([txHash])
+  @@index([createdAt])
+  @@unique([supplyOfferId, demandRequestId])
+  @@map("matches")
+}
+
+model Transaction {
+  id        String   @id @default(cuid())
+  matchId   String
+  txHash    String   @unique @db.VarChar(66)
+  amount    Decimal  @db.Decimal(18, 6)
+  token     String   @default("USDC") @db.VarChar(10)
+  status    String   @default("pending") @db.VarChar(20) // pending, confirmed, failed
+  blockNumber Int?   @db.Integer
+  gasUsed   Decimal? @db.Decimal(18, 0)
+  createdAt DateTime @default(now()) @db.Timestamptz
+  
+  // Relations
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  
+  // Indexes
+  @@index([status])
+  @@index([createdAt])
+  @@index([matchId])
+  @@map("transactions")
+}
+
+model UserProfile {
+  id            String   @id @default(cuid())
+  walletAddress String   @unique @db.VarChar(42)
+  username      String?  @db.VarChar(50)
+  email         String?  @db.VarChar(255)
+  reputation    Decimal  @default(0) @db.Decimal(3, 2) // 0.00 to 5.00
+  totalEarned   Decimal  @default(0) @db.Decimal(18, 6)
+  totalSpent    Decimal  @default(0) @db.Decimal(18, 6)
+  joinedAt      DateTime @default(now()) @db.Timestamptz
+  lastActiveAt  DateTime @default(now()) @db.Timestamptz
+  isVerified    Boolean  @default(false)
+  
+  // Indexes
+  @@index([walletAddress])
+  @@index([reputation])
+  @@map("user_profiles")
+}
+
+model MarketplaceStats {
+  id                String   @id @default(cuid())
+  date              DateTime @unique @db.Date
+  totalSupplyOffers Int      @default(0)
+  totalDemandRequests Int    @default(0)
+  totalMatches      Int      @default(0)
+  totalVolume       Decimal  @default(0) @db.Decimal(18, 6)
+  avgSupplyPrice    Decimal  @default(0) @db.Decimal(10, 6)
+  avgDemandPrice    Decimal  @default(0) @db.Decimal(10, 6)
+  uniqueUsers       Int      @default(0)
+  createdAt         DateTime @default(now()) @db.Timestamptz
+  
+  @@map("marketplace_stats")
+}
